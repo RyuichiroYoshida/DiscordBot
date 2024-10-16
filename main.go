@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/bwmarrin/discordgo"
+	"github.com/go-co-op/gocron/v2"
 	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/bwmarrin/discordgo"
+	"time"
 )
 
 // サーバーID
@@ -18,7 +19,15 @@ const guildID = "1251543101756018769"
 // チャンネルIDを格納したmap
 var idMap = make(map[string]string)
 
+var jst, _ = time.LoadLocation("Asia/Tokyo")
+
+var ns, _ = gocron.NewScheduler(gocron.WithLocation(jst))
+
+var dgs *discordgo.Session
+
 func main() {
+	scheduler()
+
 	// TODO: 環境変数に移動
 	idMap["a"] = "1295673918463414343"
 
@@ -37,6 +46,7 @@ func main() {
 		log.Fatal("Discordセッションの作成に失敗:", err)
 		return
 	}
+	dgs = dg
 
 	// メッセージ作成時のイベントハンドラーを追加
 	// dg.AddHandler(messageCreate)
@@ -48,8 +58,6 @@ func main() {
 
 	registerCommands(dg)
 
-	// dg.AddHandler(onReady)
-
 	// 終了シグナルを待機
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
@@ -57,6 +65,17 @@ func main() {
 
 	// セッションを閉じる
 	dg.Close()
+}
+
+func task() {
+	_, err := dgs.ChannelMessageSend("1295673918463414343", "\nリマインドです")
+	if err != nil {
+		log.Fatal("メッセージ送信失敗")
+	}
+}
+
+func scheduler() {
+	ns.Start()
 }
 
 // .envファイルを読み込み、環境変数に設定する
@@ -77,23 +96,6 @@ func openBot(dg *discordgo.Session) {
 	}
 
 	fmt.Println("ボットが起動しました。Ctrl+Cで終了します。")
-}
-
-// メッセージ作成時のイベントハンドラー
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// ボット自身のメッセージには反応しない
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	// 特定のメッセージに反応
-	if m.Content == "!ping" {
-		s.ChannelMessageSend(m.ChannelID, "Pong!")
-	}
-}
-
-func onReady(s *discordgo.Session, r *discordgo.Ready) {
-	fmt.Println("BOT準備完了")
 }
 
 // コマンドを登録
@@ -135,14 +137,6 @@ func registerCommands(s *discordgo.Session) {
 				},
 			},
 		},
-		{
-			Name:        "select",
-			Description: "selecting roles",
-		},
-		{
-			Name:        "hello",
-			Description: "Responds with a greeting",
-		},
 	}
 
 	for _, cmd := range commands {
@@ -160,7 +154,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.ApplicationCommandData().Name {
 		case "add-schedule":
 			line := i.ApplicationCommandData()
-			team := i.ApplicationCommandData().Options[0].StringValue()
+			//team := i.ApplicationCommandData().Options[0].StringValue()
 			//week := i.ApplicationCommandData().Options[1].StringValue()
 			//hour := i.ApplicationCommandData().Options[2].IntValue()
 			//minute := i.ApplicationCommandData().Options[3].IntValue()
@@ -174,7 +168,15 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			var test = new(discordgo.Role)
 			test.ID = role.ID
 
-			sendRemindMessage(team, s, test)
+			_, er := ns.NewJob(
+				gocron.CronJob("* * * * *", false),
+				gocron.NewTask(task),
+				//gocron.NewTask(sendRemindMessage(team, s, test)),
+			)
+			if er != nil {
+				log.Fatal("ジョブ登録失敗")
+				return
+			}
 
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
