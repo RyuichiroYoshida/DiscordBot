@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-co-op/gocron/v2"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"log"
 	"os"
@@ -12,6 +14,15 @@ import (
 	"syscall"
 	"time"
 )
+
+type JobData struct {
+	ID     uuid.UUID `json:"id"`
+	Team   string    `json:"team"`
+	Week   int64     `json:"week"`
+	Hour   int64     `json:"hour"`
+	Minute int64     `json:"minute"`
+	Role   string    `json:"role"`
+}
 
 // サーバーID
 var guildID = ""
@@ -27,6 +38,8 @@ var ns, _ = gocron.NewScheduler(gocron.WithLocation(jst))
 
 // Discordセッション
 var dgs *discordgo.Session
+
+var jobDataSlice [][]byte
 
 func main() {
 	scheduler()
@@ -73,12 +86,17 @@ func main() {
 	dg.Close()
 }
 
-// リマインドメッセージを送信するタスク
-func task() {
-	_, err := dgs.ChannelMessageSend("1295673918463414343", "\nリマインドです")
+func writeJsonData() {
+	f, err := os.Create("jsonData.txt")
 	if err != nil {
-		log.Fatal("メッセージ送信失敗")
+		log.Fatal("ファイル取得失敗")
 	}
+
+	for _, d := range jobDataSlice {
+		_, err = f.Write(d)
+	}
+
+	defer f.Close()
 }
 
 // スケジューラーを起動
@@ -194,11 +212,24 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				gocron.CronJob(cronText, false),
 				gocron.NewTask(sendRemindMessage, "a", role),
 			)
-			fmt.Println(job.ID())
+
 			if er != nil {
 				log.Fatal("ジョブ登録失敗")
 				return
 			}
+
+			// ジョブデータをJSON形式で出力
+			jobData := JobData{
+				ID:     job.ID(),
+				Team:   team,
+				Week:   week,
+				Hour:   hour,
+				Minute: minute,
+				Role:   role.ID,
+			}
+			output, _ := json.MarshalIndent(jobData, "", "\t\t")
+			jobDataSlice = append(jobDataSlice, output)
+			writeJsonData()
 
 			// コマンド実行時に入力内容をリマインドする
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
