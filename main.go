@@ -14,32 +14,38 @@ import (
 )
 
 // サーバーID
-// TODO: 環境変数に移動
-const guildID = "1251543101756018769"
+var guildID = ""
 
 // チャンネルIDを格納したmap
 var idMap = make(map[string]string)
 
+// タイムゾーンを設定
 var jst, _ = time.LoadLocation("Asia/Tokyo")
 
+// スケジューラーを作成
 var ns, _ = gocron.NewScheduler(gocron.WithLocation(jst))
 
+// Discordセッション
 var dgs *discordgo.Session
 
 func main() {
 	scheduler()
 
-	// TODO: 環境変数に移動
-	idMap["a"] = "1295673918463414343"
-
+	// .envファイルを読み込み
 	getEnv("bot.env")
+	getEnv("channel.env")
 
 	// 環境変数からボットのトークンを取得
 	token := os.Getenv("DISCORD_BOT_TOKEN")
-	if token == "" {
-		log.Fatal("DISCORD_BOT_TOKEN 環境変数が設定されていません。")
-		return
-	}
+	// 環境変数からサーバーIDを取得
+	guildID = os.Getenv("DISCORD_GUILD_ID")
+
+	// 環境変数からチャンネルIDを取得
+	idMap["a"] = os.Getenv("TEAM_A")
+	idMap["b"] = os.Getenv("TEAM_B")
+	idMap["c"] = os.Getenv("TEAM_C")
+	idMap["d"] = os.Getenv("TEAM_D")
+	idMap["e"] = os.Getenv("TEAM_E")
 
 	// 新しいDiscordセッションを作成
 	dg, err := discordgo.New("Bot " + token)
@@ -184,10 +190,11 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, week)
 
 			// ジョブ登録
-			_, er := ns.NewJob(
+			job, er := ns.NewJob(
 				gocron.CronJob(cronText, false),
 				gocron.NewTask(sendRemindMessage, "a", role),
 			)
+			fmt.Println(job.ID())
 			if er != nil {
 				log.Fatal("ジョブ登録失敗")
 				return
