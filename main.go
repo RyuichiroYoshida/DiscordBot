@@ -100,11 +100,6 @@ func openBot(dg *discordgo.Session) {
 	fmt.Println("ボットが起動しました。Ctrl+Cで終了します。")
 }
 
-// スケジュールを表示
-func showSchedules() {
-	ns.Jobs()
-}
-
 // コマンドを登録
 func registerCommands(s *discordgo.Session) {
 	commands := []*discordgo.ApplicationCommand{
@@ -119,9 +114,9 @@ func registerCommands(s *discordgo.Session) {
 					Required:    true,
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
+					Type:        discordgo.ApplicationCommandOptionInteger,
 					Name:        "曜日",
-					Description: "リマインドする曜日 (英語3文字で指定 sun~sat)",
+					Description: "リマインドする曜日 (1~7で指定 月曜日: 1, 日曜日: 7)",
 					Required:    true,
 				},
 				{
@@ -168,7 +163,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			// コマンド引数で入力された要素を読み取る
 			line := i.ApplicationCommandData()
 			team := i.ApplicationCommandData().Options[0].StringValue()
-			week := i.ApplicationCommandData().Options[1].StringValue()
+			week := i.ApplicationCommandData().Options[1].IntValue()
 			hour := i.ApplicationCommandData().Options[2].IntValue()
 			minute := i.ApplicationCommandData().Options[3].IntValue()
 			role := i.ApplicationCommandData().Options[4].RoleValue(s, guildID)
@@ -184,15 +179,14 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 			// コマンド引数で入力された文字を小文字に変換
 			team = strings.ToLower(team)
-			week = strings.ToLower(week)
 
 			// コマンド引数で入力されたスケジュールをcron形式に整形
-			cronText := fmt.Sprintf("%d %d * * %s", minute, hour, week)
+			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, week)
 
 			// ジョブ登録
 			_, er := ns.NewJob(
 				gocron.CronJob(cronText, false),
-				gocron.NewTask(task),
+				gocron.NewTask(sendRemindMessage, "a", role),
 			)
 			if er != nil {
 				log.Fatal("ジョブ登録失敗")
@@ -209,7 +203,6 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 			if err != nil {
 				log.Fatal("コマンド実行失敗")
-				return
 			}
 
 		case "show-schedules":
@@ -228,18 +221,17 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 			if err != nil {
 				log.Fatal("スケジュール表示失敗")
-				return
 			}
 		}
 	}
 }
 
 // リマインドメッセージを送信
-func sendRemindMessage(t string, s *discordgo.Session, test *discordgo.Role) {
+func sendRemindMessage(t string, test *discordgo.Role) {
 
 	txt := fmt.Sprintf("<@&%s>", test.ID)
 
-	_, err := s.ChannelMessageSend(idMap[t], txt+"\nリマインドです")
+	_, err := dgs.ChannelMessageSend(idMap[t], txt+"\nリマインドです")
 	if err != nil {
 		log.Fatal("メッセージ送信失敗")
 	}
