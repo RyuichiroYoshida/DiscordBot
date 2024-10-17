@@ -98,6 +98,7 @@ func readJsonData() {
 	for {
 		var job JobData
 		err := decoder.Decode(&job)
+		// ファイルの最後まで読み込んだら終了
 		if err == io.EOF {
 			break
 		}
@@ -180,7 +181,7 @@ func registerCommands(s *discordgo.Session) {
 				{
 					Type:        discordgo.ApplicationCommandOptionInteger,
 					Name:        "曜日",
-					Description: "リマインドする曜日 (1~7で指定 月曜日: 1, 日曜日: 7)",
+					Description: "リマインドする曜日 (0:日曜日 1:月曜日 2:火曜日 3:水曜日 4:木曜日 5:金曜日 6:土曜日)",
 					Required:    true,
 				},
 				{
@@ -225,21 +226,11 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.ApplicationCommandData().Name {
 		case "add-schedule":
 			// コマンド引数で入力された要素を読み取る
-			line := i.ApplicationCommandData()
 			team := i.ApplicationCommandData().Options[0].StringValue()
 			week := i.ApplicationCommandData().Options[1].IntValue()
 			hour := i.ApplicationCommandData().Options[2].IntValue()
 			minute := i.ApplicationCommandData().Options[3].IntValue()
 			role := i.ApplicationCommandData().Options[4].RoleValue(s, guildID)
-
-			// コマンド引数で入力された全ての要素の名前と値を改行区切りで繋げる
-			var response string
-			for _, opt := range line.Options {
-				response += fmt.Sprintf("%s: %v\n", opt.Name, opt.Value)
-			}
-
-			var test = new(discordgo.Role)
-			test.ID = role.ID
 
 			// コマンド引数で入力された文字を小文字に変換
 			team = strings.ToLower(team)
@@ -257,7 +248,17 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			writeJsonData()
 			registerJobs(jobData)
 
+			weekParseData := [7]string{
+				"日曜日",
+				"月曜日",
+				"火曜日",
+				"水曜日",
+				"木曜日",
+				"金曜日",
+				"土曜日",
+			}
 			// コマンド実行時に入力内容をリマインドする
+			response := fmt.Sprintf("リマインドスケジュールを追加しました\nチーム: %s\n曜日: %s\n時間: %d時%d分\n役職: %s", team, weekParseData[week], hour, minute, role.Name)
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
