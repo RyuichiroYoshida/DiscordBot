@@ -49,7 +49,6 @@ func main() {
 	dgs = dg
 
 	// メッセージ作成時のイベントハンドラーを追加
-	// dg.AddHandler(messageCreate)
 	dg.AddHandler(onInteractionCreate)
 
 	// 必要なインテントを設定（メッセージの読み取りのためにGUILD_MESSAGESを有効に）
@@ -67,6 +66,7 @@ func main() {
 	dg.Close()
 }
 
+// リマインドメッセージを送信するタスク
 func task() {
 	_, err := dgs.ChannelMessageSend("1295673918463414343", "\nリマインドです")
 	if err != nil {
@@ -74,6 +74,7 @@ func task() {
 	}
 }
 
+// スケジューラーを起動
 func scheduler() {
 	ns.Start()
 }
@@ -96,6 +97,11 @@ func openBot(dg *discordgo.Session) {
 	}
 
 	fmt.Println("ボットが起動しました。Ctrl+Cで終了します。")
+}
+
+// スケジュールを表示
+func showSchedules() {
+	ns.Jobs()
 }
 
 // コマンドを登録
@@ -137,6 +143,10 @@ func registerCommands(s *discordgo.Session) {
 				},
 			},
 		},
+		{
+			Name:        "show-schedules",
+			Description: "登録されているスケジュールを表示",
+		},
 	}
 
 	for _, cmd := range commands {
@@ -171,7 +181,6 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			_, er := ns.NewJob(
 				gocron.CronJob("* * * * *", false),
 				gocron.NewTask(task),
-				//gocron.NewTask(sendRemindMessage(team, s, test)),
 			)
 			if er != nil {
 				log.Fatal("ジョブ登録失敗")
@@ -187,6 +196,24 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 			if err != nil {
 				log.Fatal("コマンド実行失敗")
+				return
+			}
+		case "show-schedules":
+			var response string
+			for _, s := range ns.Jobs() {
+				nj, _ := s.NextRun()
+				response += fmt.Sprintf("%s\n", nj)
+			}
+
+			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: response,
+				},
+			})
+
+			if err != nil {
+				log.Fatal("スケジュール表示失敗")
 				return
 			}
 		}
