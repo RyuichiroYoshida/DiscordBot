@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-co-op/gocron/v2"
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"io"
 	"log"
@@ -17,12 +16,9 @@ import (
 )
 
 type JobData struct {
-	ID     uuid.UUID `json:"id"`
-	Team   string    `json:"team"`
-	Week   int64     `json:"week"`
-	Hour   int64     `json:"hour"`
-	Minute int64     `json:"minute"`
-	Role   string    `json:"role"`
+	Team string `json:"team"`
+	Cron string `json:"cron"`
+	Role string `json:"role"`
 }
 
 // サーバーID
@@ -90,6 +86,7 @@ func main() {
 	dg.Close()
 }
 
+// JSON形式のジョブデータを読み込む
 func readJsonData() {
 	f, err := os.Open("jobData.json")
 	if err != nil {
@@ -108,8 +105,8 @@ func readJsonData() {
 			log.Fatal("JSONデコード失敗")
 			return
 		}
+		registerJobs(job)
 		jobDataSlice = append(jobDataSlice, job)
-		log.Println(job)
 	}
 }
 
@@ -131,6 +128,20 @@ func writeJsonData() {
 // スケジューラーを起動
 func scheduler() {
 	ns.Start()
+}
+
+func registerJobs(j JobData) {
+	fmt.Println(j)
+	// ジョブ登録
+	_, er := ns.NewJob(
+		gocron.CronJob(j.Cron, false),
+		gocron.NewTask(sendRemindMessage, j.Team, j.Role),
+	)
+
+	if er != nil {
+		log.Fatal("ジョブ登録失敗" + er.Error())
+		return
+	}
 }
 
 // .envファイルを読み込み、環境変数に設定する
@@ -236,28 +247,15 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			// コマンド引数で入力されたスケジュールをcron形式に整形
 			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, week)
 
-			// ジョブ登録
-			job, er := ns.NewJob(
-				gocron.CronJob(cronText, false),
-				gocron.NewTask(sendRemindMessage, team, role),
-			)
-
-			if er != nil {
-				log.Fatal("ジョブ登録失敗")
-				return
-			}
-
 			// ジョブデータをJSON形式で出力
 			jobData = JobData{
-				ID:     job.ID(),
-				Team:   team,
-				Week:   week,
-				Hour:   hour,
-				Minute: minute,
-				Role:   role.ID,
+				Team: team,
+				Cron: cronText,
+				Role: role.ID,
 			}
 			jobDataSlice = append(jobDataSlice, jobData)
 			writeJsonData()
+			registerJobs(jobData)
 
 			// コマンド実行時に入力内容をリマインドする
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -266,6 +264,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 					Content: response,
 				},
 			})
+			log.Println(response)
 
 			if err != nil {
 				log.Fatal("コマンド実行失敗")
@@ -293,9 +292,9 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 // リマインドメッセージを送信
-func sendRemindMessage(t string, test *discordgo.Role) {
+func sendRemindMessage(t string, test string) {
 
-	txt := fmt.Sprintf("<@&%s>", test.ID)
+	txt := fmt.Sprintf("<@&%s>", test)
 
 	_, err := dgs.ChannelMessageSend(idMap[t], txt+"\nリマインドです")
 	if err != nil {
