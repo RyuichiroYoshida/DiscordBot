@@ -7,6 +7,7 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -39,10 +40,13 @@ var ns, _ = gocron.NewScheduler(gocron.WithLocation(jst))
 // Discordセッション
 var dgs *discordgo.Session
 
-var jobDataSlice [][]byte
+var jobDataSlice []JobData
+
+var jobData JobData
 
 func main() {
 	scheduler()
+	readJsonData()
 
 	// .envファイルを読み込み
 	getEnv("bot.env")
@@ -86,14 +90,39 @@ func main() {
 	dg.Close()
 }
 
+func readJsonData() {
+	f, err := os.Open("jobData.json")
+	if err != nil {
+		log.Fatal("ファイル取得失敗")
+	}
+	defer f.Close()
+
+	decoder := json.NewDecoder(f)
+	for {
+		var job JobData
+		err := decoder.Decode(&job)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal("JSONデコード失敗")
+			return
+		}
+		jobDataSlice = append(jobDataSlice, job)
+		log.Println(job)
+	}
+}
+
+// JSON形式でジョブデータを出力
 func writeJsonData() {
-	f, err := os.Create("jsonData.txt")
+	f, err := os.Create("jobData.json")
 	if err != nil {
 		log.Fatal("ファイル取得失敗")
 	}
 
 	for _, d := range jobDataSlice {
-		_, err = f.Write(d)
+		output, _ := json.MarshalIndent(d, "", "\t\t")
+		_, err = f.Write(output)
 	}
 
 	defer f.Close()
@@ -210,7 +239,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			// ジョブ登録
 			job, er := ns.NewJob(
 				gocron.CronJob(cronText, false),
-				gocron.NewTask(sendRemindMessage, "a", role),
+				gocron.NewTask(sendRemindMessage, team, role),
 			)
 
 			if er != nil {
@@ -219,7 +248,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			}
 
 			// ジョブデータをJSON形式で出力
-			jobData := JobData{
+			jobData = JobData{
 				ID:     job.ID(),
 				Team:   team,
 				Week:   week,
@@ -227,8 +256,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Minute: minute,
 				Role:   role.ID,
 			}
-			output, _ := json.MarshalIndent(jobData, "", "\t\t")
-			jobDataSlice = append(jobDataSlice, output)
+			jobDataSlice = append(jobDataSlice, jobData)
 			writeJsonData()
 
 			// コマンド実行時に入力内容をリマインドする
