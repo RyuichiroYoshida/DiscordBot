@@ -114,25 +114,25 @@ func registerCommands(s *discordgo.Session) {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "team",
-					Description: "所属するチームを選択",
+					Description: "所属するチームを選択 (a~e)",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "day_of_week",
-					Description: "リマインドする曜日",
+					Name:        "曜日",
+					Description: "リマインドする曜日 (漢字一文字で指定)",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionInteger,
 					Name:        "時",
-					Description: "0~23",
+					Description: "リマインドする時間 (0~23)",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionInteger,
 					Name:        "分",
-					Description: "0~59",
+					Description: "リマインドする分 (0~59)",
 					Required:    true,
 				},
 				{
@@ -165,9 +165,9 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		case "add-schedule":
 			line := i.ApplicationCommandData()
 			//team := i.ApplicationCommandData().Options[0].StringValue()
-			//week := i.ApplicationCommandData().Options[1].StringValue()
-			//hour := i.ApplicationCommandData().Options[2].IntValue()
-			//minute := i.ApplicationCommandData().Options[3].IntValue()
+			week := i.ApplicationCommandData().Options[1].StringValue()
+			hour := i.ApplicationCommandData().Options[2].IntValue()
+			minute := i.ApplicationCommandData().Options[3].IntValue()
 			role := i.ApplicationCommandData().Options[4].RoleValue(s, guildID)
 
 			var response string
@@ -178,8 +178,18 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			var test = new(discordgo.Role)
 			test.ID = role.ID
 
+			// コマンド引数で得たスケジュールをcron形式に整形
+			var weekOfNumber int
+			switch week {
+			case "日":
+				weekOfNumber = 0
+			case "月":
+			}
+			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, weekOfNumber)
+
+			// ジョブ登録
 			_, er := ns.NewJob(
-				gocron.CronJob("* * * * *", false),
+				gocron.CronJob(cronText, false),
 				gocron.NewTask(task),
 			)
 			if er != nil {
@@ -187,6 +197,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				return
 			}
 
+			// コマンド実行時に入力内容をリマインドする
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -198,6 +209,7 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				log.Fatal("コマンド実行失敗")
 				return
 			}
+
 		case "show-schedules":
 			var response string
 			for _, s := range ns.Jobs() {
