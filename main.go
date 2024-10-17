@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -120,7 +121,7 @@ func registerCommands(s *discordgo.Session) {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "曜日",
-					Description: "リマインドする曜日 (漢字一文字で指定)",
+					Description: "リマインドする曜日 (英語3文字で指定 sun~sat)",
 					Required:    true,
 				},
 				{
@@ -159,17 +160,20 @@ func registerCommands(s *discordgo.Session) {
 	fmt.Println("All commands registered successfully")
 }
 
+// コマンド実行時処理
 func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if i.Type == discordgo.InteractionApplicationCommand {
 		switch i.ApplicationCommandData().Name {
 		case "add-schedule":
+			// コマンド引数で入力された要素を読み取る
 			line := i.ApplicationCommandData()
-			//team := i.ApplicationCommandData().Options[0].StringValue()
+			team := i.ApplicationCommandData().Options[0].StringValue()
 			week := i.ApplicationCommandData().Options[1].StringValue()
 			hour := i.ApplicationCommandData().Options[2].IntValue()
 			minute := i.ApplicationCommandData().Options[3].IntValue()
 			role := i.ApplicationCommandData().Options[4].RoleValue(s, guildID)
 
+			// コマンド引数で入力された全ての要素の名前と値を改行区切りで繋げる
 			var response string
 			for _, opt := range line.Options {
 				response += fmt.Sprintf("%s: %v\n", opt.Name, opt.Value)
@@ -178,14 +182,12 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			var test = new(discordgo.Role)
 			test.ID = role.ID
 
-			// コマンド引数で得たスケジュールをcron形式に整形
-			var weekOfNumber int
-			switch week {
-			case "日":
-				weekOfNumber = 0
-			case "月":
-			}
-			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, weekOfNumber)
+			// コマンド引数で入力された文字を小文字に変換
+			team = strings.ToLower(team)
+			week = strings.ToLower(week)
+
+			// コマンド引数で入力されたスケジュールをcron形式に整形
+			cronText := fmt.Sprintf("%d %d * * %s", minute, hour, week)
 
 			// ジョブ登録
 			_, er := ns.NewJob(
