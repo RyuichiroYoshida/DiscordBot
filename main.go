@@ -1,304 +1,83 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"DiscordBot/commands"
+	"DiscordBot/discord"
+	"DiscordBot/scheduler"
+	"DiscordBot/utils"
 	"github.com/bwmarrin/discordgo"
-	"github.com/go-co-op/gocron/v2"
-	"github.com/joho/godotenv"
-	"io"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 )
 
-type JobData struct {
-	Team string `json:"team"`
-	Cron string `json:"cron"`
-	Role string `json:"role"`
-}
-
-// サーバーID
-var guildID = ""
-
-// チャンネルIDを格納したmap
-var idMap = make(map[string]string)
-
-// タイムゾーンを設定
-var jst, _ = time.LoadLocation("Asia/Tokyo")
-
-// スケジューラーを作成
-var ns, _ = gocron.NewScheduler(gocron.WithLocation(jst))
-
-// Discordセッション
-var dgs *discordgo.Session
-
-var jobDataSlice []JobData
-
-var jobData JobData
+var (
+	GuildID string
+	dgs     *discordgo.Session
+	reader  utils.JSONReader = &utils.FileJSONReader{}
+	s                        = commands.Ns
+)
 
 func main() {
-	scheduler()
-	readJsonData()
+	initializeEnv()
+	initializeSchedule()
 
-	// .envファイルを読み込み
-	getEnv("bot.env")
-	getEnv("channel.env")
+	sessionManager := &discord.DiscordSessionManager{}
+	dgs = sessionManager.InitializeSession(os.Getenv("DISCORD_BOT_TOKEN"))
 
-	// 環境変数からボットのトークンを取得
-	token := os.Getenv("DISCORD_BOT_TOKEN")
-	// 環境変数からサーバーIDを取得
-	guildID = os.Getenv("DISCORD_GUILD_ID")
+	dgs.AddHandler(onInteractionCreate)
+	dgs.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsAll | discordgo.PermissionSendMessages
 
-	// 環境変数からチャンネルIDを取得
-	idMap["a"] = os.Getenv("TEAM_A")
-	idMap["b"] = os.Getenv("TEAM_B")
-	idMap["c"] = os.Getenv("TEAM_C")
-	idMap["d"] = os.Getenv("TEAM_D")
-	idMap["e"] = os.Getenv("TEAM_E")
-
-	// 新しいDiscordセッションを作成
-	dg, err := discordgo.New("Bot " + token)
-	if err != nil {
-		log.Fatal("Discordセッションの作成に失敗:", err)
-		return
+	if err := dgs.Open(); err != nil {
+		log.Fatalf("Discordセッションのオープンに失敗: %v", err)
 	}
-	dgs = dg
+	defer dgs.Close()
 
-	// メッセージ作成時のイベントハンドラーを追加
-	dg.AddHandler(onInteractionCreate)
+	log.Println("ボットが起動しました。Ctrl+Cで終了します。")
 
-	// 必要なインテントを設定（メッセージの読み取りのためにGUILD_MESSAGESを有効に）
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsAll | discordgo.PermissionSendMessages
-	openBot(dg)
+	waitForExitSignal()
+}
 
-	registerCommands(dg)
+// initializeEnvは環境変数の読み込みとJSONファイルの読み込みを行う
+func initializeEnv() {
+	envLoader := &utils.DotenvLoader{}
+	envLoader.LoadEnv("bot.env")
+	envLoader.LoadEnv("channel.env")
 
-	// 終了シグナルを待機
+	GuildID = os.Getenv("DISCORD_GUILD_ID")
+
+	commands.JobDataSlice = append(reader.ReadJSON("jobData.json"))
+}
+
+// initializeScheduleはスケジューラを初期化する
+func initializeSchedule() {
+	for _, jobData := range commands.JobDataSlice {
+		s.RegisterJob(jobData.Cron, scheduler.SendRemindMessage, jobData.Team, jobData.Role)
+	}
+
+	s.Start()
+}
+
+// onInteractionCreateはDiscordからのインタラクションイベントを処理する
+func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	var cmd commands.Command
+
+	switch i.ApplicationCommandData().Name {
+	case "add-schedule":
+		cmd = &commands.AddScheduleCommand{}
+	case "show-schedules":
+		cmd = &commands.ShowSchedulesCommand{}
+	}
+
+	if cmd != nil {
+		cmd.Execute(s, i)
+	}
+}
+
+// waitForExitSignalは終了シグナルを待機してボットを安全にシャットダウンする
+func waitForExitSignal() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-
-	// セッションを閉じる
-	dg.Close()
-}
-
-// JSON形式のジョブデータを読み込む
-func readJsonData() {
-	f, err := os.Open("jobData.json")
-	if err != nil {
-		log.Fatal("ファイル取得失敗")
-	}
-	defer f.Close()
-
-	decoder := json.NewDecoder(f)
-	for {
-		var job JobData
-		err := decoder.Decode(&job)
-		// ファイルの最後まで読み込んだら終了
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatal("JSONデコード失敗")
-			return
-		}
-		registerJobs(job)
-		jobDataSlice = append(jobDataSlice, job)
-	}
-}
-
-// JSON形式でジョブデータを出力
-func writeJsonData() {
-	f, err := os.Create("jobData.json")
-	if err != nil {
-		log.Fatal("ファイル取得失敗")
-	}
-
-	for _, d := range jobDataSlice {
-		output, _ := json.MarshalIndent(d, "", "\t\t")
-		_, err = f.Write(output)
-	}
-
-	defer f.Close()
-}
-
-// スケジューラーを起動
-func scheduler() {
-	ns.Start()
-}
-
-func registerJobs(j JobData) {
-	fmt.Println(j)
-	// ジョブ登録
-	_, er := ns.NewJob(
-		gocron.CronJob(j.Cron, false),
-		gocron.NewTask(sendRemindMessage, j.Team, j.Role),
-	)
-
-	if er != nil {
-		log.Fatal("ジョブ登録失敗" + er.Error())
-		return
-	}
-}
-
-// .envファイルを読み込み、環境変数に設定する
-func getEnv(filename string) {
-	err := godotenv.Load(filename)
-	if err != nil {
-		log.Fatal(".envファイルの読み込みに失敗しました:", err)
-		return
-	}
-}
-
-// ボットにログイン
-func openBot(dg *discordgo.Session) {
-	err := dg.Open()
-	if err != nil {
-		log.Fatal("Discordセッションのオープンに失敗:", err)
-		return
-	}
-
-	fmt.Println("ボットが起動しました。Ctrl+Cで終了します。")
-}
-
-// コマンドを登録
-func registerCommands(s *discordgo.Session) {
-	commands := []*discordgo.ApplicationCommand{
-		{
-			Name:        "add-schedule",
-			Description: "リマインドしたいスケジュールを追加",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "team",
-					Description: "所属するチームを選択 (a~e)",
-					Required:    true,
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Name:        "曜日",
-					Description: "リマインドする曜日 (0:日曜日 1:月曜日 2:火曜日 3:水曜日 4:木曜日 5:金曜日 6:土曜日)",
-					Required:    true,
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Name:        "時",
-					Description: "リマインドする時間 (0~23)",
-					Required:    true,
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Name:        "分",
-					Description: "リマインドする分 (0~59)",
-					Required:    true,
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionRole,
-					Name:        "role",
-					Description: "リマインドする役職",
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        "show-schedules",
-			Description: "登録されているスケジュールを表示",
-		},
-	}
-
-	for _, cmd := range commands {
-		_, err := s.ApplicationCommandCreate(s.State.User.ID, guildID, cmd)
-		if err != nil {
-			log.Fatalf("Failed to register command %s: %v", cmd.Name, err)
-		}
-	}
-
-	fmt.Println("All commands registered successfully")
-}
-
-// コマンド実行時処理
-func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.Type == discordgo.InteractionApplicationCommand {
-		switch i.ApplicationCommandData().Name {
-		case "add-schedule":
-			// コマンド引数で入力された要素を読み取る
-			team := i.ApplicationCommandData().Options[0].StringValue()
-			week := i.ApplicationCommandData().Options[1].IntValue()
-			hour := i.ApplicationCommandData().Options[2].IntValue()
-			minute := i.ApplicationCommandData().Options[3].IntValue()
-			role := i.ApplicationCommandData().Options[4].RoleValue(s, guildID)
-
-			// コマンド引数で入力された文字を小文字に変換
-			team = strings.ToLower(team)
-
-			// コマンド引数で入力されたスケジュールをcron形式に整形
-			cronText := fmt.Sprintf("%d %d * * %d", minute, hour, week)
-
-			// ジョブデータをJSON形式で出力
-			jobData = JobData{
-				Team: team,
-				Cron: cronText,
-				Role: role.ID,
-			}
-			jobDataSlice = append(jobDataSlice, jobData)
-			writeJsonData()
-			registerJobs(jobData)
-
-			weekParseData := [7]string{
-				"日曜日",
-				"月曜日",
-				"火曜日",
-				"水曜日",
-				"木曜日",
-				"金曜日",
-				"土曜日",
-			}
-			// コマンド実行時に入力内容をリマインドする
-			response := fmt.Sprintf("リマインドスケジュールを追加しました\nチーム: %s\n曜日: %s\n時間: %d時%d分\n役職: %s", team, weekParseData[week], hour, minute, role.Name)
-			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: response,
-				},
-			})
-			log.Println(response)
-
-			if err != nil {
-				log.Fatal("コマンド実行失敗")
-			}
-
-		case "show-schedules":
-			var response string
-			for _, s := range ns.Jobs() {
-				nj, _ := s.NextRun()
-				response += fmt.Sprintf("%s\n", nj)
-			}
-
-			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: response,
-				},
-			})
-
-			if err != nil {
-				log.Fatal("スケジュール表示失敗")
-			}
-		}
-	}
-}
-
-// リマインドメッセージを送信
-func sendRemindMessage(t string, test string) {
-
-	txt := fmt.Sprintf("<@&%s>", test)
-
-	_, err := dgs.ChannelMessageSend(idMap[t], txt+"\nリマインドです")
-	if err != nil {
-		log.Fatal("メッセージ送信失敗")
-	}
 }
