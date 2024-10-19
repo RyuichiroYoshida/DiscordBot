@@ -36,6 +36,8 @@ func main() {
 
 	log.Println("ボットが起動しました。Ctrl+Cで終了します。")
 
+	createCommands()
+
 	waitForExitSignal()
 }
 
@@ -59,6 +61,34 @@ func initializeSchedule() {
 	s.Start()
 }
 
+// createCommandsはDiscordのコマンドを登録する
+func createCommands() {
+	add := commands.CreateAddScheduleCommand{}
+	show := &commands.CreateShowSchedulesCommand{}
+	remove := &commands.CreateRemoveScheduleCommand{}
+
+	for _, cmd := range add.CreateCommand() {
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		if err != nil {
+			log.Fatalf("コマンド登録失敗: %v", err)
+		}
+	}
+
+	for _, cmd := range show.CreateCommand() {
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		if err != nil {
+			log.Fatalf("コマンド登録失敗: %v", err)
+		}
+	}
+
+	for _, cmd := range remove.CreateCommand() {
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		if err != nil {
+			log.Fatalf("コマンド登録失敗: %v", err)
+		}
+	}
+}
+
 // onInteractionCreateはDiscordからのインタラクションイベントを処理する
 func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var cmd commands.Command
@@ -68,6 +98,8 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		cmd = &commands.AddScheduleCommand{}
 	case "show-schedules":
 		cmd = &commands.ShowSchedulesCommand{}
+	case "remove-schedule":
+		cmd = &commands.RemoveScheduleCommand{}
 	}
 
 	if cmd != nil {
