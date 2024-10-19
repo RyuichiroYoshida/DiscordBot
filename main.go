@@ -55,7 +55,7 @@ func initializeEnv() {
 // initializeScheduleはスケジューラを初期化する
 func initializeSchedule() {
 	for _, jobData := range commands.JobDataSlice {
-		s.RegisterJob(jobData.Cron, scheduler.SendRemindMessage, jobData.Team, jobData.Role)
+		s.RegisterJob(jobData.Cron, scheduler.SendRemindMessage, jobData.Team, jobData.Role, dgs)
 	}
 
 	s.Start()
