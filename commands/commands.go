@@ -4,16 +4,19 @@ import (
 	"DiscordBot/scheduler"
 	"DiscordBot/utils"
 	"fmt"
+	"github.com/ahmetb/go-linq"
 	"github.com/bwmarrin/discordgo"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var (
-	JobDataSlice []utils.JobData
-	Ns           = scheduler.NewGoCronScheduler(time.FixedZone("Asia/Tokyo", 9*60*60))
-	jsonWriter   = &utils.FileJSONWriter{}
+	JobDataSlice  []utils.JobData
+	Ns            = scheduler.NewGoCronScheduler(time.FixedZone("Asia/Tokyo", 9*60*60))
+	jsonWriter    = &utils.FileJSONWriter{}
+	weekParseData = [7]string{"日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"}
 )
 
 // Command コマンドを処理するインターフェース
@@ -87,9 +90,8 @@ func (c *AddScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Interact
 	jobData := utils.JobData{Team: team, Cron: cronText, Role: role.ID}
 	JobDataSlice = append(JobDataSlice, jobData)
 	jsonWriter.WriteJSON("jobData.json", JobDataSlice)
-	Ns.RegisterJob(cronText, scheduler.SendRemindMessage, team, role.ID)
+	Ns.RegisterJob(cronText, scheduler.SendRemindMessage, team, role.ID, s)
 
-	weekParseData := [7]string{"日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"}
 	response := fmt.Sprintf("リマインドスケジュールを追加しました (Number: %d)\nチーム: %s\n曜日: %s\n時間: %d時%d分\n役職: %s", len(JobDataSlice), team, weekParseData[week], hour, minute, role.Name)
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -109,6 +111,14 @@ func (c *CreateShowSchedulesCommand) CreateCommand() []*discordgo.ApplicationCom
 		{
 			Name:        "show-schedules",
 			Description: "登録されているスケジュールを表示",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "team",
+					Description: "スケジュールを表示したいチームを選択 (a~e 又は all)",
+					Required:    true,
+				},
+			},
 		},
 	}
 
@@ -119,12 +129,39 @@ func (c *CreateShowSchedulesCommand) CreateCommand() []*discordgo.ApplicationCom
 type ShowSchedulesCommand struct{}
 
 func (c *ShowSchedulesCommand) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	team := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
+
 	var response string
-	for _, job := range Ns.Jobs() {
-		if nextRun, err := job.NextRun(); err == nil {
-			response += fmt.Sprintf("%s\n", nextRun)
+
+	if team == "all" {
+		for _, job := range Ns.Jobs() {
+			if nextRun, err := job.NextRun(); err == nil {
+				response += fmt.Sprintf("%s\n", nextRun)
+			}
+		}
+	} else {
+		for _, a := range JobDataSlice {
+			log.Println(a)
+		}
+
+		var teamSlice []utils.JobData
+		linq.From(JobDataSlice).Where(func(j interface{}) bool {
+			return j.(utils.JobData).Team == team
+		}).ToSlice(&teamSlice)
+
+		if teamSlice == nil {
+			log.Fatal("指定されたチームは存在しません")
+		}
+
+		for _, job := range teamSlice {
+			arr := strings.Split(job.Cron, " ")
+			m, _ := strconv.Atoi(arr[0])
+			h, _ := strconv.Atoi(arr[1])
+			w := weekParseData[int(arr[4][0]-'0')]
+			response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, job.Role)
 		}
 	}
+
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: response},
