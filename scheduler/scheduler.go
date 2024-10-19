@@ -48,6 +48,14 @@ func (s *GoCronScheduler) Jobs() []gocron.Job {
 	return s.scheduler.Jobs()
 }
 
+// RemoveJob ジョブをスケジューラから削除
+func (s *GoCronScheduler) RemoveJob(jobID int) {
+	err := s.scheduler.RemoveJob(s.Jobs()[jobID].ID())
+	if err != nil {
+		log.Fatalf("ジョブ削除失敗: %v", err)
+	}
+}
+
 // SendRemindMessage リマインドメッセージを送信する関数
 func SendRemindMessage(team string, roleID string) {
 	// リマインドメッセージを送信するロジックをここに追加
