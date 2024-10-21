@@ -158,7 +158,13 @@ func (c *ShowSchedulesCommand) Execute(s *discordgo.Session, i *discordgo.Intera
 			m, _ := strconv.Atoi(arr[0])
 			h, _ := strconv.Atoi(arr[1])
 			w := weekParseData[int(arr[4][0]-'0')]
-			response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, job.Role)
+
+			r, e := s.State.Role(i.GuildID, job.Role)
+			if e != nil {
+				log.Fatalf("役職取得失敗: %v", e)
+			}
+
+			response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, r.Name)
 		}
 	}
 
