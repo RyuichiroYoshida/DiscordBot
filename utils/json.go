@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -51,6 +52,12 @@ func (r *FileJSONReader) ReadJSON(filename string) []JobData {
 
 	var data []JobData
 	decoder := json.NewDecoder(f)
+	if _, e := decoder.Token(); e == io.EOF {
+		fmt.Println("JSONが空です")
+		// jsonが空の場合終了
+		return data
+	}
+
 	if err := decoder.Decode(&data); err != nil {
 		log.Fatalf("JSONデコード失敗: %v", err)
 	}
