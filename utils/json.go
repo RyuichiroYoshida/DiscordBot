@@ -2,9 +2,8 @@ package utils
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -20,17 +19,17 @@ type FileJSONWriter struct{}
 func (w *FileJSONWriter) WriteJSON(filename string, data interface{}) {
 	f, err := os.Create(filename)
 	if err != nil {
-		log.Fatalf("ファイル取得失敗: %v", err)
+		slog.Warn("ファイル作成失敗: %v", err)
 	}
 	defer f.Close()
 
 	output, err := json.MarshalIndent(data, "", "\t\t")
 	if err != nil {
-		log.Fatalf("JSONエンコード失敗: %v", err)
+		slog.Warn("JSON変換失敗: %v", err)
 	}
 
 	if _, err := f.Write(output); err != nil {
-		log.Fatalf("JSON書き込み失敗: %v", err)
+		slog.Warn("ファイル書き込み失敗: %v", err)
 	}
 }
 
@@ -46,23 +45,23 @@ type FileJSONReader struct{}
 func (r *FileJSONReader) ReadJSON(filename string) []JobData {
 	f, err := os.Open(filename)
 	if err != nil {
-		log.Fatalf("ファイル取得失敗: %v", err)
+		slog.Error("ファイルオープン失敗: %v", err)
 	}
 	defer f.Close()
 
 	var data []JobData
 	decoder := json.NewDecoder(f)
 	if _, e := decoder.Token(); e == io.EOF {
-		fmt.Println("JSONが空です")
+		slog.Warn("JSONデータが空です")
 		// jsonが空の場合終了
 		return data
 	}
 
 	if err := decoder.Decode(&data); err != nil {
-		log.Fatalf("JSONデコード失敗: %v", err)
+		slog.Error("JSONデータの読み込みに失敗: %v", err)
 	}
 
-	fmt.Println(data)
+	slog.Info("JSONデータを読み込みました", data)
 
 	return data
 }

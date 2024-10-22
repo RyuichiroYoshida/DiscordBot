@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/go-co-op/gocron/v2"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 )
@@ -54,7 +54,7 @@ func (s *GoCronScheduler) RegisterJob(cronExpr string, jobFunc interface{}, para
 		gocron.CronJob(cronExpr, false),
 		gocron.NewTask(jobFunc, params...),
 	); err != nil {
-		log.Fatalf("ジョブ登録失敗: %v", err)
+		slog.Warn("ジョブ登録失敗: %v", err)
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *GoCronScheduler) Jobs() []gocron.Job {
 func (s *GoCronScheduler) RemoveJob(jobID int) {
 	err := s.scheduler.RemoveJob(s.Jobs()[jobID].ID())
 	if err != nil {
-		log.Fatalf("ジョブ削除失敗: %v", err)
+		slog.Warn("ジョブ削除失敗: %v", err)
 	}
 }
 
@@ -82,6 +82,6 @@ func SendRemindMessage(team string, roleID string, dgs *discordgo.Session) {
 	txt := fmt.Sprintf("<@&%s>\nMTGリマインドです～", roleID)
 	_, err := dgs.ChannelMessageSend(channelId[team], txt)
 	if err != nil {
-		log.Fatalf("メッセージ送信失敗: %v", err)
+		slog.Warn("メッセージ送信失敗: %v", err)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"DiscordBot/scheduler"
 	"DiscordBot/utils"
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,11 +30,11 @@ func main() {
 	dgs.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsAll | discordgo.PermissionSendMessages
 
 	if err := dgs.Open(); err != nil {
-		log.Fatalf("Discordセッションのオープンに失敗: %v", err)
+		slog.Warn("Discordセッションの開始に失敗: %v", err)
 	}
 	defer dgs.Close()
 
-	log.Println("ボットが起動しました。Ctrl+Cで終了します。")
+	slog.Info("ボットが起動しました。Ctrl+Cで終了します。")
 
 	createCommands()
 
@@ -70,21 +70,21 @@ func createCommands() {
 	for _, cmd := range add.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
 		if err != nil {
-			log.Fatalf("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: %v", err)
 		}
 	}
 
 	for _, cmd := range show.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
 		if err != nil {
-			log.Fatalf("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: %v", err)
 		}
 	}
 
 	for _, cmd := range remove.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
 		if err != nil {
-			log.Fatalf("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: %v", err)
 		}
 	}
 }

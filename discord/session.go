@@ -2,7 +2,7 @@ package discord
 
 import (
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"log/slog"
 )
 
 // SessionManager Discordセッションを管理するインターフェース
@@ -17,7 +17,7 @@ type DiscordSessionManager struct{}
 func (d *DiscordSessionManager) InitializeSession(token string) *discordgo.Session {
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-		log.Fatalf("Discordセッションの作成に失敗: %v", err)
+		slog.Warn("Discordセッションの初期化に失敗: %v", err)
 	}
 	return dg
 }

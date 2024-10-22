@@ -2,7 +2,7 @@ package utils
 
 import (
 	"github.com/joho/godotenv"
-	"log"
+	"log/slog"
 )
 
 // EnvLoader 環境変数を読み込むインターフェース
@@ -17,6 +17,6 @@ type DotenvLoader struct{}
 func (d *DotenvLoader) LoadEnv(filename string) {
 	err := godotenv.Load(filename)
 	if err != nil {
-		log.Fatal(".envファイルの読み込みに失敗しました:", err)
+		slog.Error(".envファイルの読み込みに失敗しました:", err)
 	}
 }

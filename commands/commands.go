@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/ahmetb/go-linq"
 	"github.com/bwmarrin/discordgo"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -97,9 +97,9 @@ func (c *AddScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Interact
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: response},
 	}); err != nil {
-		log.Fatalf("コマンド実行失敗: %v", err)
+		slog.Error("スケジュール追加失敗: ", err)
 	}
-	log.Println(response)
+	slog.Info("スケジュール追加成功\n", response)
 }
 
 // CreateShowSchedulesCommand スケジュールを表示するコマンドを生成するファクトリ
@@ -132,47 +132,43 @@ func (c *ShowSchedulesCommand) Execute(s *discordgo.Session, i *discordgo.Intera
 	team := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
 
 	var response string
+	var teamSlice []utils.JobData
 
+	// 全チームのスケジュール確認の場合は全てのスケジュールを抽出
 	if team == "all" {
-		for _, job := range Ns.Jobs() {
-			if nextRun, err := job.NextRun(); err == nil {
-				response += fmt.Sprintf("%s\n", nextRun)
-			}
-		}
+		teamSlice = JobDataSlice
 	} else {
-		for _, a := range JobDataSlice {
-			log.Println(a)
-		}
-
-		var teamSlice []utils.JobData
+		// 指定されたチームのスケジュールを抽出
 		linq.From(JobDataSlice).Where(func(j interface{}) bool {
 			return j.(utils.JobData).Team == team
 		}).ToSlice(&teamSlice)
 
 		if teamSlice == nil {
-			log.Fatal("指定されたチームは存在しません")
+			slog.Warn("指定されたチームのスケジュールは存在しません")
+		}
+	}
+
+	// スケジュールをresponseに追加
+	for _, job := range teamSlice {
+		arr := strings.Split(job.Cron, " ")
+		m, _ := strconv.Atoi(arr[0])
+		h, _ := strconv.Atoi(arr[1])
+		w := weekParseData[int(arr[4][0]-'0')]
+
+		r, e := s.State.Role(i.GuildID, job.Role)
+		if e != nil {
+			slog.Warn("役職取得失敗: ", e)
+			r = &discordgo.Role{Name: "missing"}
 		}
 
-		for _, job := range teamSlice {
-			arr := strings.Split(job.Cron, " ")
-			m, _ := strconv.Atoi(arr[0])
-			h, _ := strconv.Atoi(arr[1])
-			w := weekParseData[int(arr[4][0]-'0')]
-
-			r, e := s.State.Role(i.GuildID, job.Role)
-			if e != nil {
-				log.Fatalf("役職取得失敗: %v", e)
-			}
-
-			response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, r.Name)
-		}
+		response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, r.Name)
 	}
 
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: response},
 	}); err != nil {
-		log.Fatalf("スケジュール表示失敗: %v", err)
+		slog.Warn("スケジュール表示失敗: ", err)
 	}
 }
 
@@ -210,7 +206,7 @@ func (c *RemoveScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Inter
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{Content: "指定された番号のスケジュールは存在しません"},
 		}); err != nil {
-			log.Fatalf("スケジュール削除失敗: %v", err)
+			slog.Warn("スケジュール削除失敗: ", err)
 		}
 		return
 	}
@@ -223,6 +219,6 @@ func (c *RemoveScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Inter
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: "スケジュールを削除しました"},
 	}); err != nil {
-		log.Fatalf("スケジュール削除失敗: %v", err)
+		slog.Warn("スケジュール削除失敗: ", err)
 	}
 }
