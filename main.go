@@ -32,7 +32,9 @@ func main() {
 	if err := dgs.Open(); err != nil {
 		slog.Warn("Discordセッションの開始に失敗: %v", err)
 	}
+
 	defer dgs.Close()
+	defer unregisterAllCommands(dgs)
 
 	slog.Info("ボットが起動しました。Ctrl+Cで終了します。")
 
@@ -61,28 +63,45 @@ func initializeSchedule() {
 	s.Start()
 }
 
+// clearCacheはアプリケーションコマンドを削除する
+func unregisterAllCommands(ds *discordgo.Session) {
+	cs, err := ds.ApplicationCommands(ds.State.User.ID, "")
+	if err != nil {
+		slog.Warn("アプリケーションコマンドの取得に失敗しました: %v", err)
+	}
+
+	for _, cmd := range cs {
+		err := ds.ApplicationCommandDelete(ds.State.User.ID, "", cmd.ID)
+		if err != nil {
+			slog.Warn("コマンドの削除に失敗しました: %v", err)
+		} else {
+			slog.Info("コマンドを削除しました: %s", cmd.Name)
+		}
+	}
+}
+
 // createCommandsはDiscordのコマンドを登録する
 func createCommands() {
-	add := commands.CreateAddScheduleCommand{}
+	add := &commands.CreateAddScheduleCommand{}
 	show := &commands.CreateShowSchedulesCommand{}
 	remove := &commands.CreateRemoveScheduleCommand{}
 
 	for _, cmd := range add.CreateCommand() {
-		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
 			slog.Warn("コマンド登録失敗: %v", err)
 		}
 	}
 
 	for _, cmd := range show.CreateCommand() {
-		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
 			slog.Warn("コマンド登録失敗: %v", err)
 		}
 	}
 
 	for _, cmd := range remove.CreateCommand() {
-		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, GuildID, cmd)
+		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
 			slog.Warn("コマンド登録失敗: %v", err)
 		}
