@@ -34,7 +34,8 @@ func main() {
 	}
 
 	defer dgs.Close()
-	defer unregisterAllCommands(dgs)
+	// 一括コマンド削除関数
+	//defer unregisterAllCommands(dgs)
 
 	slog.Info("ボットが起動しました。Ctrl+Cで終了します。")
 
@@ -46,8 +47,8 @@ func main() {
 // initializeEnvは環境変数の読み込みとJSONファイルの読み込みを行う
 func initializeEnv() {
 	envLoader := &utils.DotenvLoader{}
+	// 開発時と本番時で環境変数を読み込むファイルを変更
 	envLoader.LoadEnv("bot.env")
-	envLoader.LoadEnv("channel.env")
 
 	GuildID = os.Getenv("DISCORD_GUILD_ID")
 
@@ -85,27 +86,36 @@ func createCommands() {
 	add := &commands.CreateAddScheduleCommand{}
 	show := &commands.CreateShowSchedulesCommand{}
 	remove := &commands.CreateRemoveScheduleCommand{}
+	// デバッグ用
+	// showEnv := &commands.CreateShowEnvCommand{}
 
 	for _, cmd := range add.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
-			slog.Warn("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: ", err)
 		}
 	}
 
 	for _, cmd := range show.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
-			slog.Warn("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: ", err)
 		}
 	}
 
 	for _, cmd := range remove.CreateCommand() {
 		_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
 		if err != nil {
-			slog.Warn("コマンド登録失敗: %v", err)
+			slog.Warn("コマンド登録失敗: ", err)
 		}
 	}
+	// デバッグ用
+	//for _, cmd := range showEnv.CreateCommand() {
+	//	_, err := dgs.ApplicationCommandCreate(dgs.State.User.ID, "", cmd)
+	//	if err != nil {
+	//		slog.Warn("コマンド登録失敗: ", err)
+	//	}
+	//}
 }
 
 // onInteractionCreateはDiscordからのインタラクションイベントを処理する
@@ -119,6 +129,8 @@ func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		cmd = &commands.ShowSchedulesCommand{}
 	case "remove-schedule":
 		cmd = &commands.RemoveScheduleCommand{}
+		//case "show-env":
+		//	cmd = &commands.ShowEnvCommand{}
 	}
 
 	if cmd != nil {
