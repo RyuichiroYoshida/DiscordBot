@@ -10,14 +10,17 @@ import (
 	"time"
 )
 
-var channelId = map[string]string{}
+var ChannelId = map[string]string{}
+
+// ReminderTiming 登録したスケジュールから、この時間分前にリマインドを送信する (Hour)
+const ReminderTiming = 3
 
 // init は環境変数を読み込む
 func init() {
 	envLoader := &utils.DotenvLoader{}
 	envLoader.LoadEnv("channel.env")
 
-	channelId = map[string]string{
+	ChannelId = map[string]string{
 		"a": os.Getenv("TEAM_A"),
 		"b": os.Getenv("TEAM_B"),
 		"c": os.Getenv("TEAM_C"),
@@ -80,7 +83,7 @@ func (s *GoCronScheduler) RemoveJob(jobID int) {
 func SendRemindMessage(team string, roleID string, dgs *discordgo.Session) {
 
 	txt := fmt.Sprintf("<@&%s>\nMTGリマインドです～", roleID)
-	_, err := dgs.ChannelMessageSend(channelId[team], txt)
+	_, err := dgs.ChannelMessageSend(ChannelId[team], txt)
 	if err != nil {
 		slog.Warn("メッセージ送信失敗: %v", err)
 	}
