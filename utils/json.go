@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"io"
 	"log/slog"
 	"os"
 )
@@ -51,14 +50,15 @@ func (r *FileJSONReader) ReadJSON(filename string) []JobData {
 
 	var data []JobData
 	decoder := json.NewDecoder(f)
-	if _, e := decoder.Token(); e == io.EOF {
-		slog.Warn("JSONデータが空です")
-		// jsonが空の場合終了
-		return data
-	}
+	//if _, e := decoder.Token(); e == io.EOF {
+	//	slog.Warn("JSONデータが空です")
+	//	// jsonが空の場合終了
+	//	return data
+	//}
 
 	if err := decoder.Decode(&data); err != nil {
 		slog.Error("JSONデータの読み込みに失敗: %v", err)
+		return nil
 	}
 
 	slog.Info("JSONデータを読み込みました", data)
