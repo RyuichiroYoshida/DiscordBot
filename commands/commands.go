@@ -80,9 +80,16 @@ func (c *CreateAddScheduleCommand) CreateCommand() []*discordgo.ApplicationComma
 type AddScheduleCommand struct{}
 
 func (c *AddScheduleCommand) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// チーム名、曜日、時間、分、役職を取得
 	team := strings.ToLower(i.ApplicationCommandData().Options[0].StringValue())
 	week := i.ApplicationCommandData().Options[1].IntValue()
-	hour := i.ApplicationCommandData().Options[2].IntValue()
+	// 時間を指定された時間からリマインドタイミングを引いた時間に設定
+	hour := i.ApplicationCommandData().Options[2].IntValue() - scheduler.ReminderTiming
+	// 時間が0未満になる場合は24を加算
+	if hour < 0 {
+		hour += 24
+	}
+
 	minute := i.ApplicationCommandData().Options[3].IntValue()
 	role := i.ApplicationCommandData().Options[4].RoleValue(s, i.GuildID)
 
@@ -92,7 +99,7 @@ func (c *AddScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Interact
 	jsonWriter.WriteJSON("jobData.json", JobDataSlice)
 	Ns.RegisterJob(cronText, scheduler.SendRemindMessage, team, role.ID, s)
 
-	response := fmt.Sprintf("リマインドスケジュールを追加しました (Number: %d)\nチーム: %s\n曜日: %s\n時間: %d時%d分\n役職: %s", len(JobDataSlice), team, weekParseData[week], hour, minute, role.Name)
+	response := fmt.Sprintf("リマインドスケジュールを追加しました (Number: %d)\nMTG時間の3時間前にリマインドされます\nチーム: %s\n曜日: %s\n時間: %d時%d分\n役職: %s", len(JobDataSlice), team, weekParseData[week], hour, minute, role.Name)
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: response},
@@ -153,6 +160,11 @@ func (c *ShowSchedulesCommand) Execute(s *discordgo.Session, i *discordgo.Intera
 		arr := strings.Split(job.Cron, " ")
 		m, _ := strconv.Atoi(arr[0])
 		h, _ := strconv.Atoi(arr[1])
+		// 時間が24を超える場合は24を引く
+		if h+scheduler.ReminderTiming > 24 {
+			h += scheduler.ReminderTiming - 24
+		}
+
 		w := weekParseData[int(arr[4][0]-'0')]
 
 		r, e := s.State.Role(i.GuildID, job.Role)
@@ -161,7 +173,7 @@ func (c *ShowSchedulesCommand) Execute(s *discordgo.Session, i *discordgo.Intera
 			r = &discordgo.Role{Name: "missing"}
 		}
 
-		response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, m, h, w, r.Name)
+		response += fmt.Sprintf("チーム: %s\n時間: %02d:%02d\n曜日: %s\n役職: %s\n\n", job.Team, h, m, w, r.Name)
 	}
 
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -220,5 +232,36 @@ func (c *RemoveScheduleCommand) Execute(s *discordgo.Session, i *discordgo.Inter
 		Data: &discordgo.InteractionResponseData{Content: "スケジュールを削除しました"},
 	}); err != nil {
 		slog.Warn("スケジュール削除失敗: ", err)
+	}
+}
+
+// CreateShowEnvCommand 環境変数を表示するコマンドを生成するファクトリ
+type CreateShowEnvCommand struct{}
+
+func (c *CreateShowEnvCommand) CreateCommand() []*discordgo.ApplicationCommand {
+	dc := []*discordgo.ApplicationCommand{
+		{
+			Name:        "show-env",
+			Description: "環境変数を表示",
+		},
+	}
+
+	return dc
+}
+
+// ShowEnvCommand 環境変数を表示するコマンド
+type ShowEnvCommand struct{}
+
+func (c *ShowEnvCommand) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	env := ""
+	for k, v := range scheduler.ChannelId {
+		env += fmt.Sprintf("Team %s ID: %s\n", k, v)
+	}
+
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: env},
+	}); err != nil {
+		slog.Warn("環境変数表示失敗: ", err)
 	}
 }
